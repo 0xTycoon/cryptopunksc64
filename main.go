@@ -1,35 +1,45 @@
 package main
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
 	"image/png"
+	"io/ioutil"
 	"math"
 	"os"
+	"os/exec"
+	"strconv"
 
 	"github.com/lucasb-eyer/go-colorful"
+	"golang.org/x/image/draw"
 )
 
 var colorTable [16]colorful.Color
 
 // BASIC decoder decodes the Run-length-encoded pixel data and draws a punk in character mode
 // uses poke 649 to set the color, chr$(18) to inverse the next printed character
-var decoderBASIC string = `10 c% = 0 : y% = 0 : i% = 0
-20 read c
-30 if c = -1 then goto 70
-32 read i
-33 if i = -1 then goto 70
-40 poke 646, c
-50 print chr$(18) " ";
-51 i = i - 1
-52 y = y + 1
-53 if y = 24 then print ""
-54 if y = 24 then y = 0
-55 if i <> 0 then goto 50
-60 goto 20
-70 print "cryptopunks c64 mmxx";
+var decoderBASIC string = `10 C% = 0 : Y% = 0 : I% = 0
+20 READ C
+30 IF C = 42069 THEN GOTO 70
+32 READ I
+33 IF I = 42069 THEN GOTO 70
+40 POKE 646, C
+50 PRINT CHR$(18) " ";
+51 I = I - 1
+52 Y = Y + 1
+53 IF Y = 24 THEN PRINT ""
+54 IF Y = 24 THEN Y = 0
+55 IF I <> 0 THEN GOTO 50
+60 GOTO 20
+70 POKE 781,0:POKE 782,0:SYS 65520:RESTORE:GOTO 10
 `
+
+// 70 PRINT "CRYPTOPUNKS C64 MMXX";
+
+var dirname string
 
 func init() {
 	// The 16 Colors of the Commodore 64
@@ -49,6 +59,7 @@ func init() {
 	colorTable[13] = colorful.Color{R: 170.0 / 255.0, G: 255.0 / 255.0, B: 102.0 / 255.0} // light green
 	colorTable[14] = colorful.Color{R: 0.0, G: 136.0 / 255.0, B: 255.0 / 255.0}           // light blue
 	colorTable[15] = colorful.Color{R: 187.0 / 255.0, G: 187.0 / 255.0, B: 187.0 / 255.0} // light gery
+
 }
 
 func matchColor(c color.Color) int {
@@ -70,9 +81,19 @@ func matchColor(c color.Color) int {
 	return match
 }
 
+func resize(src image.Image, dstSize image.Point) *image.RGBA {
+	srcRect := src.Bounds()
+	dstRect := image.Rectangle{
+		Min: image.Point{0, 0},
+		Max: dstSize,
+	}
+	dst := image.NewRGBA(dstRect)
+	draw.NearestNeighbor.Scale(dst, dstRect, src, srcRect, draw.Over, nil)
+	return dst
+}
+
 // encode the image using run-length encoding
 func encode(img image.Image) []uint8 {
-
 	result := make([]uint8, 0)
 	var currentColor uint8
 	count := 0
@@ -80,7 +101,7 @@ func encode(img image.Image) []uint8 {
 	for y := 0; y < 24; y++ {
 		for x := 0; x < 24; x++ {
 			var c uint8
-			pixel := img.At(x, y)
+			pixel := img.At(img.Bounds().Min.X+x, img.Bounds().Min.Y+y)
 			_, _, _, a := pixel.RGBA()
 			if a == 0 {
 				// background
@@ -108,10 +129,6 @@ func encode(img image.Image) []uint8 {
 
 }
 
-/*
-
-
- */
 // decode the image data using run-length encoding
 func decode(data []uint8) *image.RGBA {
 	newimg := image.NewRGBA(image.Rect(0, 0, 24, 24))
@@ -157,9 +174,9 @@ func toBasic(data []uint8) (lines string) {
 		pos += 2
 		if pos >= len(data) {
 			if count == 0 {
-				lines = lines + fmt.Sprintf("%d data -1", lineNo)
+				lines = lines + fmt.Sprintf("%d DATA 42069", lineNo)
 			} else {
-				lines = lines + ", -1"
+				lines = lines + ", 42069"
 			}
 			return
 		}
@@ -167,7 +184,123 @@ func toBasic(data []uint8) (lines string) {
 
 }
 
+var composite image.Image
+
+func loadCompositeImage(punksPath string) (img image.Image, err error) {
+	f, err := os.Open(punksPath) // load the punks composite
+	if err != nil {
+		return
+	}
+	img, err = png.Decode(f)
+	return
+}
+
+/**
+* getPunkImage returns a single punk profile pic 24x24
+ */
+func getPunkImage(punkID int) image.Image {
+	x := punkID % 100 * 24
+	y := punkID / 100 * 24
+	ret := composite.(interface {
+		SubImage(r image.Rectangle) image.Image
+	}).SubImage(image.Rect(x, y, x+24, y+24))
+	return ret
+}
+
+/**
+* generateBasic generates a Commodore Basic V2 program and saves it in metadata/
+ */
+func generateBasic(punkID int, metaPath string) error {
+	img := getPunkImage(punkID)
+	rle := encode(img)
+	basic := toBasic(rle)
+	path := metaPath + "/" + strconv.Itoa(punkID/100)
+
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		err := os.Mkdir(path, os.ModePerm)
+		if err != nil {
+			fmt.Println(err)
+			return err
+		}
+	}
+	f, err := os.Create(path + "/" + strconv.Itoa(punkID) + ".bas")
+	defer f.Close()
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+	_, err = f.WriteString(basic)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+	return nil
+}
+
 func main() {
+	var err error
+
+	punksPath := "./punks.png"
+	metaPath := "./docs/metadata" //os.Getwd()
+	bas2prgPath := "./prg/prg-tools/bas2prg"
+	if len(os.Args) > 1 {
+		punksPath = os.Args[1]
+	}
+	if len(os.Args) > 2 {
+		metaPath = os.Args[2]
+	}
+
+	composite, err = loadCompositeImage(punksPath)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	for punkID := 0; punkID < 10000; punkID++ {
+		err = generateBasic(punkID, metaPath)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		_, err = bas2prg(punkID, bas2prgPath, metaPath)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+	}
+	os.Exit(0)
+}
+
+/**
+bas2prg yes
+bas2prgPath /prg/prg-tools/bas2prg
+*/
+func bas2prg(punkID int, bas2prgPath string, path string) ([]byte, error) {
+	var err error
+	out := &bytes.Buffer{}
+	subDir := strconv.Itoa(punkID / 100)
+	cmd := exec.Command(
+		"bash", "-c", bas2prgPath+" < "+path+"/"+subDir+"/"+strconv.Itoa(punkID)+".bas")
+	cmd.Stdout = out
+	err = cmd.Start()
+	if err != nil {
+		return out.Bytes(), err
+	}
+	err = cmd.Wait()
+	if err != nil {
+		return out.Bytes(), err
+	}
+	err = ioutil.WriteFile(
+		path+"/"+subDir+"/"+strconv.Itoa(punkID)+".prg",
+		out.Bytes(),
+		0644)
+
+	//sEnc := b64.StdEncoding.EncodeToString(out.Bytes())
+
+	return out.Bytes(), err
+}
+
+func old() {
 
 	f, err := os.Open("./punk.png")
 	if err != nil {
