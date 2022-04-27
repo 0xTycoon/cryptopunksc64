@@ -39,8 +39,18 @@ The BASIC code that this Go program generates implements a decoder with just a b
 How to view your Punk
 ===
 
-TODO
+#### Vice Emulator
 
+https://0xtycoon.github.io/cryptopunksc64/c64.html?file=metadata/55/5537.prg
+
+
+### Chips by floooh
+
+https://0xtycoon.github.io/cryptopunksc64/c64.html?file=metadata/55/5537.prg
+
+### Basic Program
+
+You can also view your basic program, they are located in the docs/metadata directory
 
 BASIC Program listing
 =======

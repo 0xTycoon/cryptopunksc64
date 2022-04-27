@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en-us">
+<head>
+    <style type="text/css">
+        body {
+            margin: 0;
+            background-color: black;
+        }
+        #canvas {
+            position: absolute;
+            top: 0px;
+            left: 0px;
+            margin: 0px;
+            border: 0;
+            width: 100%;
+
+            overflow: hidden;
+            display: block;
+            image-rendering: optimizeSpeed;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: -o-crisp-edges;
+            image-rendering: -webkit-optimize-contrast;
+            image-rendering: optimize-contrast;
+            image-rendering: crisp-edges;
+            image-rendering: pixelated;
+            -ms-interpolation-mode: nearest-neighbor;
+        }
+    </style>
+</head>
+<body>
+<!-- the canvas *must not* have any border or padding, or mouse coords will be wrong -->
+<canvas id="canvas" style="border: 0px none;"></canvas>
+<script type="text/javascript">
+
+    const getBase64FromUrl = async (url) => {
+        const data = await fetch(url);
+
+        const blob = await data.blob();
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(blob);
+            reader.onloadend = () => {
+                const base64data = reader.result;
+                resolve(base64data);
+            }
+        });
+    }
+
+    function audioDetected() {
+        return (typeof Audio === 'function' && new Audio().mozSetup === 'function') ||
+            (typeof AudioContext === 'function') ||
+            (typeof webkitAudioContext === 'function');
+    }
+
+    let base64EncodedFile;
+
+    async function loadBefore() {
+        let p = new URLSearchParams(window.location.search);
+        let name = p.get("file")
+        base64EncodedFile = await getBase64FromUrl(name);
+        base64EncodedFile = base64EncodedFile.substring(37, base64EncodedFile.length);
+    }
+
+    function sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async function loadFiles() {
+        while (typeof base64EncodedFile === 'undefined') {
+            await sleep(500);
+        }
+        console.log(base64EncodedFile);
+        let ret = await FS.createDataFile('/', 'punk.prg', window.atob(base64EncodedFile), true, true);
+        console.log(ret);
+    }
+
+    var viceArguments = ['-autostart', 'punk.prg'].concat(
+        audioDetected() ? ['-soundsync', 0, '-soundrate', 22050, '-soundfragsize', 2] : ['-sound']
+    );
+
+
+    loadBefore();
+
+    var Module = {
+        preRun: [loadFiles],
+        arguments: ['+sound', '-autostart', 'punk.prg'],
+        canvas: document.getElementById('canvas'),
+    };
+
+    window.onload = function () {
+        var tag = document.createElement("script");
+        tag.src = "x64.js";
+        document.getElementsByTagName("head")[0].appendChild(tag);
+    }
+
+</script>
+</body>
+</html>
