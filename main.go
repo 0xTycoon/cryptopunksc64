@@ -17,17 +17,23 @@ import (
 	"golang.org/x/image/draw"
 )
 
-var colorTable [16]colorful.Color
+var colorTable [32]colorful.Color
 
 // BASIC decoder decodes the Run-length-encoded pixel data and draws a punk in character mode
 // uses poke 649 to set the color, chr$(18) to inverse the next printed character
-var decoderBASIC string = `10 C% = 0 : Y% = 0 : I% = 0
+
+// todo bug on line 55, maybe it should go to 354
+
+// CHR$(18) - reverse on
+var decoderBASIC string = `10 C% = 0 : Y% = 0 : I% = 0 : A% = 0
+11 POKE 53281,2
 20 READ C
 30 IF C = 42069 THEN GOTO 70
-32 READ I
+32 READ I: A = 32
 33 IF I = 42069 THEN GOTO 70
+34 IF C > 15 THEN POKE 646, C-15: A=166: GOTO 50
 40 POKE 646, C
-50 PRINT CHR$(18) " ";
+50 PRINT CHR$(18) CHR$(A);
 51 I = I - 1
 52 Y = Y + 1
 53 IF Y = 24 THEN PRINT ""
@@ -59,7 +65,33 @@ func init() {
 	colorTable[13] = colorful.Color{R: 170.0 / 255.0, G: 255.0 / 255.0, B: 102.0 / 255.0} // light green
 	colorTable[14] = colorful.Color{R: 0.0, G: 136.0 / 255.0, B: 255.0 / 255.0}           // light blue
 	colorTable[15] = colorful.Color{R: 187.0 / 255.0, G: 187.0 / 255.0, B: 187.0 / 255.0} // light gery
+	//colorTable[2+15] = colorTable[2].BlendLab(colorTable[6], 0.5)
+	//colorTable[3+15] = colorTable[3].BlendLab(colorTable[6], 0.5)
+	for i := 2; i < 16; i++ {
+		colorTable[15+i] = colorTable[i].BlendLab(colorTable[2], 0.1)
 
+		// 3, 04 rendered rge alien correct, zombeanie looks cool, 3760 weird
+		//colorTable[15+i] = colorTable[i].BlendLab(colorTable[2], 0.1)
+		//colorTable[15+i] = colorTable[i].BlendLuv(colorTable[2], 0.1)
+		// 2, 0.1 BEST!!
+		// 2, 0.1, 3760 is sherone's ok, alien ok, ape ok
+		// 12, 0.2 alien good, 457 beard ok,
+		// 5, 0.4 alien sucked, but 3760 rendered ok
+		// gellow 457 crap
+		// dark grey, 0.1 - alien good, 6151 ok, 5573, boss, 3760 lacked beard
+		// black: ape 1021 looked cool, zombeanie ok, 6151 washed out, breads ok, aliens suck
+		// white sucked too
+		// colorTable[15+i] = colorTable[i].BlendLab(colorTable[13], 0.3) light green kinda sucked except zomb
+		// colorTable[15+i] = colorTable[i].BlendLab(colorTable[2], 0.3) red background punk3064 good detail
+		// colorTable[15+i] = colorTable[i].BlendLab(colorTable[5], 0.4) green
+		// fg 6 &  colorTable[i].BlendLab(colorTable[6], 0.3) looked cool blue (contrasty)
+		// fg 11 &  colorTable[i].BlendLab(colorTable[3], 0.3) looked cool (dark)
+		// fg 3 &  colorTable[i].BlendLab(colorTable[0], 0.3) looked cool cyan (dark)
+		// fg black &  colorTable[i].BlendLab(colorTable[0], 0.3) looked cool (dark)
+	}
+	fmt.Println(colorTable[3].RGB255())
+	fmt.Println(colorTable[3+15].RGB255())
+	//os.Exit(0)
 }
 
 func matchColor(c color.Color) int {
@@ -67,7 +99,7 @@ func matchColor(c color.Color) int {
 	target := colorful.Color{R: float64(rgba.R) / 255.0, G: float64(rgba.G) / 255.0, B: float64(rgba.B) / 255.0}
 	var match int
 	lowest := math.MaxFloat64
-	for i := 0; i < 16; i++ {
+	for i := 0; i < 32; i++ {
 		if d := colorTable[i].DistanceCIEDE2000(target); d == 0.0 {
 			// exact match
 			return i
@@ -92,6 +124,8 @@ func resize(src image.Image, dstSize image.Point) *image.RGBA {
 	return dst
 }
 
+var matched bool
+
 // encode the image using run-length encoding
 func encode(img image.Image) []uint8 {
 	result := make([]uint8, 0)
@@ -108,6 +142,9 @@ func encode(img image.Image) []uint8 {
 				c = background
 			} else {
 				c = uint8(matchColor(pixel))
+				if c > 15 {
+					matched = true
+				}
 			}
 			if count == 0 {
 				count++
@@ -212,7 +249,11 @@ func getPunkImage(punkID int) image.Image {
  */
 func generateBasic(punkID int, metaPath string) error {
 	img := getPunkImage(punkID)
+	matched = false
 	rle := encode(img)
+	if matched {
+		fmt.Println("match c > 15, ", punkID)
+	}
 	basic := toBasic(rle)
 	path := metaPath + "/" + strconv.Itoa(punkID/100)
 

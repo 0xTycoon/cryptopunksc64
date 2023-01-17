@@ -117,19 +117,23 @@ This go program does the conversion from Punk image to BASIC program to PRG file
 #### prg-tools
 
 Git clone https://github.com/abbrev/prg-tools
+$ cd prg-tools
+$ make
 
-make
+From the project dir:
 
-./bas2prg <../../metadata/0/1.bas >test.prg
+$ prg/prg-tools/bas2prg < docs/metadata/0/0.bas > test.prg
+$ x64 test.prg
 
 
 #### Alternative: tok64
 
+cd tok64
 git clone https://github.com/burinm/tok64
 
 make
 
-./tok64 /toprg /64 ../../metadata/0/2.bas
+./tok64 /toprg /64 ../../docs/metadata/0/0.bas
 
 Some emulators to try one https://virtualconsoles.com/online-emulators/c64/
 
