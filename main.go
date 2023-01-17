@@ -22,25 +22,27 @@ var colorTable [32]colorful.Color
 // BASIC decoder decodes the Run-length-encoded pixel data and draws a punk in character mode
 // uses poke 649 to set the color, chr$(18) to inverse the next printed character
 
-// todo bug on line 55, maybe it should go to 354
-
 // CHR$(18) - reverse on
-var decoderBASIC string = `10 C% = 0 : Y% = 0 : I% = 0 : A% = 0
+var decoderBASIC string = `10 C% = 0 : Y% = 0 : I% = 0 : A% = 0 : FILL% = 6: FG% = RND(-TI)
 11 POKE 53281,2
 20 READ C
 30 IF C = 42069 THEN GOTO 70
 32 READ I: A = 32
 33 IF I = 42069 THEN GOTO 70
 34 IF C > 15 THEN POKE 646, C-15: A=166: GOTO 50
-40 POKE 646, C
+40 IF C = 3 THEN C = FG
+41 POKE 646, C
+49 IF Y = 0 THEN FILL = 6: FG = INT(RND(1)*16) : GOSUB 80
 50 PRINT CHR$(18) CHR$(A);
 51 I = I - 1
 52 Y = Y + 1
-53 IF Y = 24 THEN PRINT ""
+53 IF Y = 24 THEN FILL = 8: GOSUB 80:
 54 IF Y = 24 THEN Y = 0
-55 IF I <> 0 THEN GOTO 50
+55 IF I <> 0 THEN GOTO 49
 60 GOTO 20
 70 POKE 781,0:POKE 782,0:SYS 65520:RESTORE:GOTO 10
+80 POKE 646, FG: FOR F = 0 TO FILL: PRINT CHR$(18) CHR$(166);:NEXT F
+81 RETURN
 `
 
 // 70 PRINT "CRYPTOPUNKS C64 MMXX";
@@ -131,7 +133,7 @@ func encode(img image.Image) []uint8 {
 	result := make([]uint8, 0)
 	var currentColor uint8
 	count := 0
-	background := uint8(3) // cyan
+	background := uint8(31) // cyan
 	for y := 0; y < 24; y++ {
 		for x := 0; x < 24; x++ {
 			var c uint8
