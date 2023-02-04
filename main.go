@@ -21,18 +21,22 @@ var colorTable [32]colorful.Color
 
 // BASIC decoder decodes the Run-length-encoded pixel data and draws a punk in character mode
 // uses poke 649 to set the color, chr$(18) to inverse the next printed character
-
+// A% is the character (32 = space, 166 checkmask)
 // CHR$(18) - reverse on
+// INT(RND(1)*14)+1 - colors from 1 - 15 (removes black)
+// FG% = Fore Ground
+//
+
 var decoderBASIC string = `10 C% = 0 : Y% = 0 : I% = 0 : A% = 0 : FILL% = 6: FG% = RND(-TI)
 11 POKE 53281,2
 20 READ C
 30 IF C = 42069 THEN GOTO 70
 32 READ I: A = 32
 33 IF I = 42069 THEN GOTO 70
-34 IF C > 15 THEN POKE 646, C-15: A=166: GOTO 50
-40 IF C = 3 THEN C = FG
+34 IF C > 15 AND C <> 31 THEN POKE 646, C-15: A=166: GOTO 50
+40 IF C = 31 THEN C = FG
 41 POKE 646, C
-49 IF Y = 0 THEN FILL = 6: FG = INT(RND(1)*16) : GOSUB 80
+49 IF Y = 0 THEN FILL = 6: FG = INT(RND(1)*14)+1 : GOSUB 80
 50 PRINT CHR$(18) CHR$(A);
 51 I = I - 1
 52 Y = Y + 1
